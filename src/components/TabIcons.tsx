@@ -95,57 +95,6 @@ export function InboxIcon({
   );
 }
 
-export function ComposeIcon({
-  size = 24,
-  color = '#c7d2fe',
-  isActive = false,
-}: IconProps) {
-  const iconColor = isActive ? '#ffffff' : color;
-  const s = size;
-
-  return (
-    <View style={[styles.container, { width: s, height: s }]}>
-      <View
-        style={[
-          styles.rect,
-          {
-            borderColor: iconColor,
-            borderWidth: 2,
-            borderRadius: 3,
-            width: s * 0.7,
-            height: s * 0.5,
-            top: s * 0.1,
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.line,
-          {
-            backgroundColor: iconColor,
-            width: s * 0.4,
-            height: 2,
-            top: s * 0.25,
-            transform: [{ rotate: '45deg' }],
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.line,
-          {
-            backgroundColor: iconColor,
-            width: s * 0.4,
-            height: 2,
-            top: s * 0.25,
-            transform: [{ rotate: '-45deg' }],
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
 export function AssistantIcon({
   size = 24,
   color = '#c7d2fe',

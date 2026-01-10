@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,15 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tab } from '../components/BottomTabBar';
+import { getDashboardData, DashboardResponse } from '../services/api';
+import EmailDetailScreen from './EmailDetailScreen';
 
 interface HomeScreenProps {
   onNavigate?: (tab: Tab) => void;
@@ -18,10 +24,48 @@ export default function HomeScreen({
   onNavigate,
 }: HomeScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedEmailId, setSelectedEmailId] = useState<number | null>(null);
+  const [emailDetailVisible, setEmailDetailVisible] = useState(false);
+
+  const loadDashboard = useCallback(async (showRefresh: boolean = false) => {
+    try {
+      if (!showRefresh) setLoading(true);
+      setError(null);
+
+      const data = await getDashboardData();
+      setDashboardData(data);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard';
+      setError(errorMessage);
+      if (!showRefresh) {
+        Alert.alert('Error', errorMessage);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadDashboard(true);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar
+        barStyle="light-content"
+        translucent={Platform.OS === 'android'}
+        backgroundColor={Platform.OS === 'android' ? '#6366f1' : undefined}
+      />
 
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -39,68 +83,166 @@ export default function HomeScreen({
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.welcomeSection}>
-          <Text style={styles.welcomeTitle}>Welcome Back!</Text>
-          <Text style={styles.welcomeSubtitle}>
-            Your emails are being managed intelligently
-          </Text>
+      {loading && !dashboardData ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ffffff" />
+          <Text style={styles.loadingText}>Loading dashboard...</Text>
         </View>
-
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Unread Emails</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Replied Today</Text>
-          </View>
-        </View>
-
-        <View style={styles.featuresSection}>
-          <Text style={styles.sectionTitle}>Features</Text>
-
-          <FeatureCard
-            icon="📧"
-            title="Smart Email Management"
-            description="Automatically sync and organize your Gmail messages with intelligent categorization"
-          />
-
-          <FeatureCard
-            icon="🤖"
-            title="AI-Powered Replies"
-            description="Generate intelligent, context-aware email replies using advanced OpenAI technology"
-          />
-
-          <FeatureCard
-            icon="🔄"
-            title="Auto Sync"
-            description="Set up automatic email syncing on your schedule - daily, weekly, or custom intervals"
-          />
-        </View>
-
-        <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => onNavigate?.('Inbox')}
-          >
-            <Text style={styles.actionButtonText}>View Inbox</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => onNavigate?.('Compose')}
-          >
-            <Text style={styles.actionButtonText}>Compose Email</Text>
+      ) : error && !dashboardData ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={() => loadDashboard()}>
+            <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#ffffff" />
+          }
+        >
+          <View style={styles.welcomeSection}>
+            <Text style={styles.welcomeTitle}>Welcome Back!</Text>
+            <Text style={styles.welcomeSubtitle}>
+              Your emails are being managed intelligently
+            </Text>
+          </View>
+
+          <View style={styles.statsContainer}>
+            <StatCard
+              number={dashboardData?.stats.total_emails || 0}
+              label="Total Emails"
+              icon="📧"
+            />
+            <StatCard
+              number={dashboardData?.stats.unread_emails || 0}
+              label="Unread"
+              icon="📬"
+            />
+            <StatCard
+              number={dashboardData?.stats.replied_emails || 0}
+              label="Replied"
+              icon="✓"
+            />
+          </View>
+
+          {dashboardData?.recent_emails && dashboardData.recent_emails.length > 0 && (
+            <View style={styles.recentSection}>
+              <Text style={styles.sectionTitle}>Recent Emails</Text>
+              {dashboardData.recent_emails.slice(0, 3).map((email) => (
+                <RecentEmailItem
+                  key={email.id}
+                  email={email}
+                  onPress={() => {
+                    setSelectedEmailId(email.id);
+                    setEmailDetailVisible(true);
+                  }}
+                />
+              ))}
+            </View>
+          )}
+
+          <View style={styles.featuresSection}>
+            <Text style={styles.sectionTitle}>Features</Text>
+            <FeatureCard
+              icon="📧"
+              title="Smart Email Management"
+              description="Automatically sync and organize your Gmail messages with intelligent categorization"
+            />
+            <FeatureCard
+              icon="🤖"
+              title="AI-Powered Replies"
+              description="Generate intelligent, context-aware email replies using advanced AI technology"
+            />
+            <FeatureCard
+              icon="🔄"
+              title="Auto Sync"
+              description="Set up automatic email syncing on your schedule - daily, weekly, or custom intervals"
+            />
+          </View>
+
+          <View style={styles.actionsSection}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => onNavigate?.('Inbox')}
+            >
+              <Text style={styles.actionButtonText}>View Inbox</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      <EmailDetailScreen
+        emailId={selectedEmailId}
+        visible={emailDetailVisible}
+        onClose={() => {
+          setEmailDetailVisible(false);
+          setSelectedEmailId(null);
+        }}
+      />
     </View>
+  );
+}
+
+interface StatCardProps {
+  number: number;
+  label: string;
+  icon: string;
+}
+
+function StatCard({ number, label, icon }: StatCardProps) {
+  return (
+    <View style={styles.statCard}>
+      <Text style={styles.statIcon}>{icon}</Text>
+      <Text style={styles.statNumber}>{number.toLocaleString()}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+interface RecentEmailItemProps {
+  email: {
+    id: number;
+    subject: string;
+    from_email: string;
+    received_at: string;
+    read: boolean;
+    provider: 'gmail' | 'outlook';
+  };
+  onPress: () => void;
+}
+
+function RecentEmailItem({ email, onPress }: RecentEmailItemProps) {
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  return (
+    <TouchableOpacity style={styles.recentEmailItem} activeOpacity={0.7} onPress={onPress}>
+      <View style={styles.recentEmailContent}>
+        <View style={styles.recentEmailIconContainer}>
+          <Text style={styles.recentEmailIcon}>✉</Text>
+        </View>
+        <View style={styles.recentEmailMain}>
+          <View style={styles.recentEmailHeader}>
+            <Text style={styles.recentEmailSubject} numberOfLines={1}>
+              {email.subject || '(No Subject)'}
+            </Text>
+            {!email.read && <View style={styles.unreadDot} />}
+          </View>
+          <Text style={styles.recentEmailFrom} numberOfLines={1}>
+            {email.from_email}
+          </Text>
+          <Text style={styles.recentEmailDate}>{formatDate(email.received_at)}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -174,6 +316,43 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#ffffff',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6366f1',
+  },
   welcomeSection: {
     marginBottom: 24,
   },
@@ -197,23 +376,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  statNumber: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
+  statIcon: {
+    fontSize: 24,
     marginBottom: 8,
   },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#e0e7ff',
     textAlign: 'center',
   },
-  featuresSection: {
+  recentSection: {
     marginBottom: 32,
   },
   sectionTitle: {
@@ -221,6 +404,61 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 16,
+  },
+  recentEmailItem: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  recentEmailContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  recentEmailIconContainer: {
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  recentEmailIcon: {
+    fontSize: 20,
+    color: '#ffffff',
+  },
+  recentEmailMain: {
+    flex: 1,
+  },
+  recentEmailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  recentEmailSubject: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    flex: 1,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    marginLeft: 8,
+  },
+  recentEmailFrom: {
+    fontSize: 12,
+    color: '#c7d2fe',
+    marginBottom: 4,
+  },
+  recentEmailDate: {
+    fontSize: 11,
+    color: '#a5b4fc',
+  },
+  featuresSection: {
+    marginBottom: 32,
   },
   featureCard: {
     flexDirection: 'row',

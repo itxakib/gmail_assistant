@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,28 +9,40 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-interface Message {
-  id: string;
-  text: string;
-  isUser: boolean;
-  timestamp: Date;
-}
+import {
+  getAssistantHistory,
+  sendAssistantMessage,
+  AssistantMessage,
+} from '../services/api';
 
 export default function AutoAssistantScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hello! I'm your AI email assistant. How can I help you today?",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await getAssistantHistory();
+      setMessages(response.messages);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load chat history';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -40,28 +52,35 @@ export default function AutoAssistantScreen(): React.JSX.Element {
     }
   }, [messages]);
 
-  const handleSend = () => {
-    if (inputText.trim() === '') return;
+  const handleSend = async () => {
+    if (inputText.trim() === '' || sending) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+    const userMessage = inputText.trim();
     setInputText('');
+    setSending(true);
 
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: 'I understand. Let me help you with that. (OpenAI API integration coming soon)',
-        isUser: false,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, aiMessage]);
-    }, 500);
+    // Optimistically add user message
+    const tempUserMessage: AssistantMessage = {
+      id: Date.now(),
+      message: userMessage,
+      role: 'user',
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, tempUserMessage]);
+
+    try {
+      const response = await sendAssistantMessage(userMessage);
+      setMessages(prev => {
+        const updated = prev.filter(msg => msg.id !== tempUserMessage.id);
+        return [...updated, response.user_message, response.assistant_message];
+      });
+    } catch (error) {
+      setMessages(prev => prev.filter(msg => msg.id !== tempUserMessage.id));
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -71,81 +90,120 @@ export default function AutoAssistantScreen(): React.JSX.Element {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar
+          barStyle="light-content"
+          translucent={Platform.OS === 'android'}
+          backgroundColor={Platform.OS === 'android' ? '#6366f1' : undefined}
+        />
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Auto Assistant</Text>
           <Text style={styles.headerSubtitle}>AI-Powered Email Helper</Text>
         </View>
 
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.messagesContainer}
-          contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.map(message => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
-        </ScrollView>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#ffffff" />
+            <Text style={styles.loadingText}>Loading chat history...</Text>
+          </View>
+        ) : (
+          <>
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesContainer}
+              contentContainerStyle={styles.messagesContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {messages.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyIcon}>💬</Text>
+                  <Text style={styles.emptyTitle}>No messages yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    Start a conversation with your AI assistant
+                  </Text>
+                </View>
+              ) : (
+                messages.map(message => (
+                  <MessageBubble key={message.id} message={message} />
+                ))
+              )}
+              {sending && (
+                <View style={styles.aiMessage}>
+                  <ActivityIndicator size="small" color="#ffffff" />
+                </View>
+              )}
+            </ScrollView>
 
-        <View style={[styles.inputContainer, { paddingBottom: insets.bottom }]}>
-          <TextInput
-            style={styles.input}
-            placeholder="Type your message..."
-            placeholderTextColor="#9ca3af"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              !inputText.trim() && styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.sendButtonText}>Send</Text>
-          </TouchableOpacity>
-        </View>
+            <View style={[styles.inputContainer, { paddingBottom: insets.bottom }]}>
+              <TextInput
+                style={styles.input}
+                placeholder="Type your message..."
+                placeholderTextColor="rgba(255, 255, 255, 0.5)"
+                value={inputText}
+                onChangeText={setInputText}
+                multiline
+                maxLength={500}
+                editable={!sending}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  (!inputText.trim() || sending) && styles.sendButtonDisabled,
+                ]}
+                onPress={handleSend}
+                disabled={!inputText.trim() || sending}
+                activeOpacity={0.7}
+              >
+                {sending ? (
+                  <ActivityIndicator size="small" color="#6366f1" />
+                ) : (
+                  <Text style={styles.sendButtonText}>Send</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 interface MessageBubbleProps {
-  message: Message;
+  message: AssistantMessage;
 }
 
 function MessageBubble({ message }: MessageBubbleProps) {
+  const isUser = message.role === 'user';
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <View
       style={[
         styles.messageBubble,
-        message.isUser ? styles.userMessage : styles.aiMessage,
+        isUser ? styles.userMessage : styles.aiMessage,
       ]}
     >
       <Text
         style={[
           styles.messageText,
-          message.isUser ? styles.userMessageText : styles.aiMessageText,
+          isUser ? styles.userMessageText : styles.aiMessageText,
         ]}
       >
-        {message.text}
+        {message.message}
       </Text>
       <Text
         style={[
           styles.messageTime,
-          message.isUser ? styles.userMessageTime : styles.aiMessageTime,
+          isUser ? styles.userMessageTime : styles.aiMessageTime,
         ]}
       >
-        {message.timestamp.toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}
+        {formatTime(message.created_at)}
       </Text>
     </View>
   );
@@ -172,12 +230,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#e0e7ff',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#ffffff',
+  },
   messagesContainer: {
     flex: 1,
   },
   messagesContent: {
     padding: 20,
     paddingBottom: 10,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#c7d2fe',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
   messageBubble: {
     maxWidth: '80%',

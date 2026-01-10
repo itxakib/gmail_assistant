@@ -4,12 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   HomeIcon,
   InboxIcon,
-  ComposeIcon,
   AssistantIcon,
   SettingsIcon,
 } from './TabIcons';
 
-export type Tab = 'Home' | 'Inbox' | 'Compose' | 'Assistant' | 'Settings';
+export type Tab = 'Home' | 'Inbox' | 'Assistant' | 'Settings';
 
 interface BottomTabBarProps {
   activeTab: Tab;
@@ -25,7 +24,6 @@ export default function BottomTabBar({
   const tabs: { key: Tab; label: string; icon: React.ComponentType<any> }[] = [
     { key: 'Home', label: 'Home', icon: HomeIcon },
     { key: 'Inbox', label: 'Inbox', icon: InboxIcon },
-    { key: 'Compose', label: 'Compose', icon: ComposeIcon },
     { key: 'Assistant', label: 'AI Assist', icon: AssistantIcon },
     { key: 'Settings', label: 'Settings', icon: SettingsIcon },
   ];

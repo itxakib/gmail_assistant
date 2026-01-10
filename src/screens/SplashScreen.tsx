@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Animated, StatusBar, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as AuthSession from 'expo-auth-session';
 
+// For dev build / bare workflow
 interface SplashScreenProps {
   onFinish: () => void;
 }
@@ -73,7 +75,11 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar
+        barStyle="light-content"
+        translucent={Platform.OS === 'android'}
+        backgroundColor={Platform.OS === 'android' ? '#6366f1' : undefined}
+      />
 
       <Animated.View
         style={[
