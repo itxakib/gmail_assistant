@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
 } from 'react-native';
@@ -18,6 +17,7 @@ import {
   sendReply,
   Email,
 } from '../services/api';
+import { useAlert } from '../services/alertService';
 
 interface EmailDetailScreenProps {
   emailId: number | null;
@@ -33,6 +33,7 @@ export default function EmailDetailScreen({
   onReplySent,
 }: EmailDetailScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
   const [email, setEmail] = useState<Email | null>(null);
   const [loading, setLoading] = useState(false);
   const [generatedReply, setGeneratedReply] = useState<string | null>(null);
@@ -56,7 +57,7 @@ export default function EmailDetailScreen({
       setEmail(response.email);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load email';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
       onClose();
     } finally {
       setLoading(false);
@@ -71,7 +72,7 @@ export default function EmailDetailScreen({
       setGeneratedReply(response.reply);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to generate reply';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
     } finally {
       setGenerating(false);
     }
@@ -82,7 +83,7 @@ export default function EmailDetailScreen({
     try {
       setSending(true);
       await sendReply(emailId, generatedReply);
-      Alert.alert('Success', 'Reply sent successfully!', [
+      showAlert('Success', 'Reply sent successfully!', [
         {
           text: 'OK',
           onPress: () => {
@@ -93,7 +94,7 @@ export default function EmailDetailScreen({
       ]);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to send reply';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
     } finally {
       setSending(false);
     }

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +22,7 @@ import {
 } from '../services/api';
 import { saveSession } from '../services/session';
 import { GOOGLE_WEB_CLIENT_ID, MICROSOFT_CLIENT_ID } from '../config/constants';
+import { useAlert } from '../services/alertService';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -34,6 +34,7 @@ export default function LoginScreen({
   onLoginSuccess,
 }: LoginScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
   const [isLoading, setIsLoading] = useState(false);
 
   // Outlook OAuth configuration
@@ -118,20 +119,20 @@ export default function LoginScreen({
       if (isErrorWithCode(error)) {
         switch (error.code) {
           case statusCodes.SIGN_IN_CANCELLED:
-            Alert.alert('Sign-In Cancelled', 'You cancelled the sign-in process.');
+            showAlert('Sign-In Cancelled', 'You cancelled the sign-in process.');
             break;
           case statusCodes.IN_PROGRESS:
-            Alert.alert('Sign-In In Progress', 'Sign-in is already in progress.');
+            showAlert('Sign-In In Progress', 'Sign-in is already in progress.');
             break;
           case statusCodes.PLAY_SERVICES_NOT_AVAILABLE:
-            Alert.alert(
+            showAlert(
               'Play Services Unavailable',
               'Google Play Services is not available on this device.'
             );
             break;
           default:
             console.error('Google Sign-in error:', error);
-            Alert.alert('Sign-In Error', 'An error occurred during sign-in. Please try again.');
+            showAlert('Sign-In Error', 'An error occurred during sign-in. Please try again.');
         }
       } else {
         const errorMessage =
@@ -139,7 +140,7 @@ export default function LoginScreen({
             ? error.message
             : 'An unexpected error occurred. Please try again.';
         console.error('Authentication error:', error);
-        Alert.alert('Authentication Error', errorMessage);
+        showAlert('Authentication Error', errorMessage);
       }
     }
   };

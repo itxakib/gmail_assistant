@@ -8,13 +8,13 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tab } from '../components/BottomTabBar';
 import { fetchEmails, Email, syncEmails } from '../services/api';
 import EmailDetailScreen from './EmailDetailScreen';
+import { useAlert } from '../services/alertService';
 
 interface InboxScreenProps {
   onNavigate?: (tab: Tab) => void;
@@ -24,6 +24,7 @@ export default function InboxScreen({
   onNavigate,
 }: InboxScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
   const [emails, setEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +58,7 @@ export default function InboxScreen({
       const errorMessage = err instanceof Error ? err.message : 'Failed to load emails';
       setError(errorMessage);
       if (page === 1) {
-        Alert.alert('Error', errorMessage);
+        showAlert('Error', errorMessage);
       }
     } finally {
       setLoading(false);

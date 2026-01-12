@@ -8,13 +8,13 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tab } from '../components/BottomTabBar';
 import { getDashboardData, DashboardResponse } from '../services/api';
 import EmailDetailScreen from './EmailDetailScreen';
+import { useAlert } from '../services/alertService';
 
 interface HomeScreenProps {
   onNavigate?: (tab: Tab) => void;
@@ -24,6 +24,7 @@ export default function HomeScreen({
   onNavigate,
 }: HomeScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,7 +43,7 @@ export default function HomeScreen({
       const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard';
       setError(errorMessage);
       if (!showRefresh) {
-        Alert.alert('Error', errorMessage);
+        showAlert('Error', errorMessage);
       }
     } finally {
       setLoading(false);

@@ -8,7 +8,6 @@ import {
   Switch,
   StatusBar,
   ActivityIndicator,
-  Alert,
   TextInput,
   Platform,
 } from 'react-native';
@@ -17,6 +16,7 @@ import { getSettings, updateSettings, Settings, SettingsResponse } from '../serv
 import { clearSession } from '../services/session';
 import { initializeAutoSync, stopAutoSync } from '../services/autoSyncService';
 import { initializeAutoReply, stopAutoReply } from '../services/autoReplyService';
+import { useAlert } from '../services/alertService';
 
 interface SettingsScreenProps {
   onLogout?: () => void;
@@ -24,6 +24,7 @@ interface SettingsScreenProps {
 
 export default function SettingsScreen({ onLogout }: SettingsScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
   const [settingsData, setSettingsData] = useState<SettingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,7 +38,7 @@ export default function SettingsScreen({ onLogout }: SettingsScreenProps): React
       setLocalSettings(data.settings);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load settings';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ export default function SettingsScreen({ onLogout }: SettingsScreenProps): React
       setLocalSettings(data.settings);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to save settings';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
       await loadSettings();
     } finally {
       setSaving(false);
@@ -105,7 +106,7 @@ export default function SettingsScreen({ onLogout }: SettingsScreenProps): React
   };
 
   const handleLogout = async () => {
-    Alert.alert(
+    showAlert(
       'Logout',
       'Are you sure you want to logout?',
       [
@@ -119,7 +120,7 @@ export default function SettingsScreen({ onLogout }: SettingsScreenProps): React
               // Trigger session check in App.tsx
               onLogout?.();
             } catch (error) {
-              Alert.alert('Error', 'Failed to logout');
+              showAlert('Error', 'Failed to logout');
             }
           },
         },

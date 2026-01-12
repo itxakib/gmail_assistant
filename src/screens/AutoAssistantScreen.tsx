@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -18,9 +17,11 @@ import {
   sendAssistantMessage,
   AssistantMessage,
 } from '../services/api';
+import { useAlert } from '../services/alertService';
 
 export default function AutoAssistantScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,7 +35,7 @@ export default function AutoAssistantScreen(): React.JSX.Element {
       setMessages(response.messages);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load chat history';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -77,7 +78,7 @@ export default function AutoAssistantScreen(): React.JSX.Element {
     } catch (error) {
       setMessages(prev => prev.filter(msg => msg.id !== tempUserMessage.id));
       const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
     } finally {
       setSending(false);
     }

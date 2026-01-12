@@ -1,7 +1,7 @@
 {
   "name": "gmail_assistant",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "index.tsx",
   "scripts": {
     "start": "expo start",
     "start:clear": "expo start --clear",
