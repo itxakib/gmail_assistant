@@ -65,17 +65,37 @@ export default function InboxScreen({
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [showAlert]);
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await syncEmails().catch(() => {});
-    await loadEmails(1, true);
-  }, [loadEmails]);
+    try {
+      setRefreshing(true);
+      setError(null);
+      
+      // Wait for sync to complete
+      try {
+        await syncEmails();
+        // Small delay to ensure backend has processed the synced emails
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (syncError) {
+        // Log sync error but continue to load emails anyway
+        console.warn('Sync error:', syncError);
+      }
+      
+      // Load emails after sync completes
+      await loadEmails(1, true);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh emails';
+      setError(errorMessage);
+      showAlert('Refresh Error', errorMessage);
+      setRefreshing(false);
+    }
+  }, [loadEmails, showAlert]);
 
+  // Load emails on mount (when user navigates to this tab, component remounts)
   useEffect(() => {
     loadEmails(1);
-  }, []);
+  }, [loadEmails]);
 
   const handleLoadMore = () => {
     if (currentPage < totalPages && !loadingMore && !loading) {

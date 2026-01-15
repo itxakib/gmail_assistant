@@ -9,6 +9,8 @@ export const GOOGLE_WEB_CLIENT_ID = '809633911701-6k4idmbflkl03hu6lu5uk6cs5k8url
 // Microsoft OAuth Configuration
 export const MICROSOFT_CLIENT_ID = '1710f698-09cf-4fef-9ba1-ea503b99d166';
 
+export const IOS_CLIENT_ID='809633911701-vtffo0qodrc5p4uk31jt66kgf2pumrst.apps.googleusercontent.com'
+
 // API Configuration
 export const API_BASE_URL = 'https://nebubot-production.up.railway.app/api';
 

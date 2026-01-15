@@ -19,9 +19,10 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import {
   authenticateWithGoogle,
+  authenticateWithOutlook,
 } from '../services/api';
 import { saveSession } from '../services/session';
-import { GOOGLE_WEB_CLIENT_ID, MICROSOFT_CLIENT_ID } from '../config/constants';
+import { GOOGLE_WEB_CLIENT_ID, IOS_CLIENT_ID, MICROSOFT_CLIENT_ID } from '../config/constants';
 import { useAlert } from '../services/alertService';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -37,85 +38,149 @@ export default function LoginScreen({
   const { showAlert } = useAlert();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Outlook OAuth configuration
+  // ---------------- OUTLOOK CONFIG ----------------
   const outlookDiscovery = {
     authorizationEndpoint:
       'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
   };
 
+  // const redirectUri = AuthSession.makeRedirectUri({
+  //   scheme: 'msauth',
+  //   native:
+  //     Platform.OS === 'android'
+  //       ? 'msauth://com.gmailassistant.app/iYE37wRdkWwvRNZbe2SyARIv20s%3D'
+  //       : undefined,
+  // });
+  const redirectUri = AuthSession.makeRedirectUri({
+    scheme: Platform.OS === 'ios' ? 'msauth.com.gmailassistant.app' : 'msauth',
+    path: Platform.OS === 'ios' ? 'auth' : undefined,
+    native:
+      Platform.OS === 'android'
+        ? 'msauth://com.gmailassistant.app/iYE37wRdkWwvRNZbe2SyARIv20s%3D'
+        : undefined,
+  });
+  
+
+  console.log('Redirect URI:', redirectUri);
+
   const [outlookRequest, outlookResponse, promptOutlookAsync] =
     AuthSession.useAuthRequest(
       {
         clientId: MICROSOFT_CLIENT_ID,
-        scopes: ['openid', 'profile', 'email', 'User.Read'],
-        redirectUri: AuthSession.makeRedirectUri(),
-        responseType: AuthSession.ResponseType.Token,
+        scopes: ['openid', 'profile', 'email', 'User.Read', 'Mail.Read', 'Mail.Send'],
+        redirectUri,
+        responseType:
+          Platform.OS === 'android'
+            ? AuthSession.ResponseType.Code
+            : AuthSession.ResponseType.Token,
+        usePKCE: Platform.OS === 'android',
       },
       outlookDiscovery
     );
 
+  // ---------------- GOOGLE CONFIG ----------------
   useEffect(() => {
     GoogleSignin.configure({
       webClientId: GOOGLE_WEB_CLIENT_ID,
+      iosClientId: IOS_CLIENT_ID,
       offlineAccess: true,
       scopes: [
         'profile',
         'email',
-        'https://www.googleapis.com/auth/gmail.readonly', // read emails
-        'https://www.googleapis.com/auth/gmail.send', // send emails
-        'https://www.googleapis.com/auth/gmail.modify', // read/write/delete
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.modify',
       ],
     });
   }, []);
 
-  // Handle Outlook response
+  // ---------------- EXCHANGE OUTLOOK CODE ----------------
+  const exchangeCodeForToken = async (code: string) => {
+    try {
+      const body = new URLSearchParams({
+        client_id: MICROSOFT_CLIENT_ID,
+        scope: 'openid profile email User.Read Mail.Read Mail.Send',
+        code,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+        code_verifier: outlookRequest?.codeVerifier || '', // <-- add this
+      });
+  
+      const response = await fetch(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body.toString(),
+        }
+      );
+  
+      const data = await response.json();
+      console.log('OUTLOOK TOKEN RESPONSE 👉', data);
+  
+      if (data.access_token) {
+        console.log('Outlook Access Token:', data.access_token);
+  
+        // Optional: send token to backend
+        const authResponse = await authenticateWithOutlook(data.access_token);
+        await saveSession(authResponse.api_token, authResponse.user);
+        onLoginSuccess?.();
+      } else {
+        console.log('No access token received');
+      }
+    } catch (err) {
+      console.error('Error exchanging code:', err);
+    }
+  };
+  
+  // ---------------- HANDLE OUTLOOK RESPONSE ----------------
   useEffect(() => {
     if (outlookResponse?.type === 'success') {
-      const { access_token } = outlookResponse.params;
-      console.log('OUTLOOK ACCESS TOKEN 👉', access_token);
-      onLoginSuccess?.();
-    } else if (outlookResponse?.type === 'error') {
-      console.log('Outlook sign-in error:', outlookResponse.error);
+      const { code, access_token } = outlookResponse.params;
+  
+      // ✅ iOS
+      if (access_token) {
+        authenticateWithOutlook(access_token)
+          .then(async (authResponse) => {
+            await saveSession(authResponse.api_token, authResponse.user);
+            onLoginSuccess?.();
+          });
+      }
+  
+      // ✅ Android
+      if (code) {
+        exchangeCodeForToken(code);
+      }
     }
-  }, [outlookResponse, onLoginSuccess]);
+  }, [outlookResponse]);
 
-  // Google Sign-In with Gmail scopes
+  // ---------------- GOOGLE SIGN-IN ----------------
   const handleGoogleSignIn = async () => {
     try {
       setIsLoading(true);
-
-      // Sign out first to ensure fresh sign-in
       await GoogleSignin.signOut();
       await GoogleSignin.hasPlayServices();
-
-      // Sign in with Google
       const response = await GoogleSignin.signIn();
 
       if (isSuccessResponse(response)) {
         console.log('Google Sign-In successful:', response.data.user);
 
-        // Get access token from Google
         const tokens = await GoogleSignin.getTokens();
         const accessToken = tokens.accessToken;
-        console.log('Google Access Token obtained');
 
-        // Authenticate with Nebubots backend
-        console.log('Authenticating with Nebubots API...');
+        console.log('Google Access Token obtained',accessToken);
+
         const authResponse = await authenticateWithGoogle(accessToken);
         console.log('API Token received:', authResponse.api_token);
         console.log('User data:', authResponse.user);
 
-        // Save session with token and user data
         await saveSession(authResponse.api_token, authResponse.user);
-        console.log('Session saved successfully');
 
-        // Navigate to main screen
         onLoginSuccess?.();
       }
     } catch (error) {
       setIsLoading(false);
-
       if (isErrorWithCode(error)) {
         switch (error.code) {
           case statusCodes.SIGN_IN_CANCELLED:
@@ -135,12 +200,8 @@ export default function LoginScreen({
             showAlert('Sign-In Error', 'An error occurred during sign-in. Please try again.');
         }
       } else {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred. Please try again.';
         console.error('Authentication error:', error);
-        showAlert('Authentication Error', errorMessage);
+        showAlert('Authentication Error', error instanceof Error ? error.message : String(error));
       }
     }
   };
@@ -153,6 +214,7 @@ export default function LoginScreen({
     }
   };
 
+  // ---------------- UI ----------------
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar
@@ -204,9 +266,7 @@ export default function LoginScreen({
             disabled={!outlookRequest}
           >
             <View style={styles.buttonContent}>
-              <View
-                style={[styles.iconContainer, styles.outlookIconContainer]}
-              >
+              <View style={[styles.iconContainer, styles.outlookIconContainer]}>
                 <Text style={styles.outlookIcon}>O</Text>
               </View>
               <Text style={styles.outlookButtonText}>Sign in with Outlook</Text>
@@ -224,6 +284,7 @@ export default function LoginScreen({
   );
 }
 
+// ---------------- STYLES ----------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#6366f1' },
   header: { alignItems: 'center', paddingTop: 40, paddingBottom: 20 },
@@ -242,14 +303,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   logoText: { fontSize: 48, fontWeight: 'bold', color: '#6366f1' },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', letterSpacing: 0.5, marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#e0e7ff', fontWeight: '500', letterSpacing: 0.3, textAlign: 'center' },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
   description: { fontSize: 16, color: '#c7d2fe', textAlign: 'center', marginBottom: 40, lineHeight: 24 },

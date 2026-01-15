@@ -26,15 +26,24 @@ export const apiRequest = async (
         await removeApiToken();
         throw new Error('Session expired. Please login again.');
       }
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
+      let errorData: any = {};
+      try {
+        errorData = await response.json();
+      } catch {
+        try {
+          const text = await response.text();
+          errorData = { error: text || `HTTP error! status: ${response.status}` };
+        } catch {
+          errorData = { error: `HTTP error! status: ${response.status}` };
+        }
+      }
+      
+      const errorMessage = errorData.error || errorData.message || `HTTP error! status: ${response.status}`;
+      throw new Error(errorMessage);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('API request error:', error);
     throw error;
   }
 };

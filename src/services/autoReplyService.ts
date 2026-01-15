@@ -20,18 +20,15 @@ export const startAutoReply = async (): Promise<void> => {
   try {
     const token = await getApiToken();
     if (!token) {
-      console.log('Auto Reply: No token found, stopping');
       return;
     }
 
     const settings = await getSettings();
     if (!settings.settings.auto_reply_enabled) {
-      console.log('Auto Reply: Disabled in settings');
       return;
     }
 
     isRunning = true;
-    console.log('Auto Reply: Starting...');
 
     // Perform initial check
     await checkAndReplyToEmails();
@@ -47,11 +44,9 @@ export const startAutoReply = async (): Promise<void> => {
     // Listen to app state changes
     appStateSubscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active' && isRunning) {
-        // Check for new emails when app comes to foreground
         checkAndReplyToEmails().catch(console.error);
       }
     });
-    console.log('Auto Reply: Started successfully');
   } catch (error) {
     console.error('Auto Reply: Error starting:', error);
     isRunning = false;
@@ -66,7 +61,6 @@ export const stopAutoReply = (): void => {
     return;
   }
 
-  console.log('Auto Reply: Stopping...');
   isRunning = false;
 
   if (replyCheckInterval) {
@@ -80,7 +74,6 @@ export const stopAutoReply = (): void => {
   }
 
   lastCheckedTimestamp = null;
-  console.log('Auto Reply: Stopped');
 };
 
 /**
@@ -90,64 +83,66 @@ const checkAndReplyToEmails = async (): Promise<void> => {
   try {
     const token = await getApiToken();
     if (!token) {
-      console.log('Auto Reply: No token, skipping check');
       return;
     }
 
     // Double check settings before replying
     const settings = await getSettings();
     if (!settings.settings.auto_reply_enabled) {
-      console.log('Auto Reply: Disabled in settings, stopping');
       stopAutoReply();
       return;
     }
-
-    console.log('Auto Reply: Checking for unread emails...');
 
     // Fetch unread emails (first page only for efficiency)
     const response = await fetchEmails(1, 20);
     const unreadEmails = response.emails.filter(email => !email.read && !email.replied_at);
 
     if (unreadEmails.length === 0) {
-      console.log('Auto Reply: No unread emails to reply to');
       return;
     }
-
-    console.log(`Auto Reply: Found ${unreadEmails.length} unread email(s)`);
 
     // Process emails one by one
     for (const email of unreadEmails) {
       try {
-        // Skip if already replied
-        if (email.replied_at) {
+        // Skip if already replied or missing required fields
+        if (email.replied_at || !email.from_email || !email.to_email) {
           continue;
         }
 
-        console.log(`Auto Reply: Generating reply for email ${email.id}...`);
+        // Skip no-reply addresses
+        const fromEmailLower = email.from_email.toLowerCase();
+        if (
+          fromEmailLower.includes('noreply') ||
+          fromEmailLower.includes('no-reply') ||
+          fromEmailLower.includes('donotreply') ||
+          fromEmailLower.includes('do-not-reply') ||
+          fromEmailLower.includes('mailer-daemon') ||
+          fromEmailLower.includes('postmaster')
+        ) {
+          continue;
+        }
 
         // Generate AI reply
         const replyResponse = await generateReply(email.id);
-        const replyText = replyResponse.reply;
+        const replyText = replyResponse.reply?.trim();
 
-        if (!replyText || replyText.trim().length === 0) {
-          console.log(`Auto Reply: No reply generated for email ${email.id}`);
+        if (!replyText || replyText.length === 0) {
           continue;
         }
 
-        // Send the reply
-        console.log(`Auto Reply: Sending reply for email ${email.id}...`);
-        const sendResponse = await sendReply(email.id, replyText);
+        // Truncate if too long
+        const trimmedReply = replyText.length > 50000 ? replyText.substring(0, 50000) : replyText;
 
-        if (sendResponse.success) {
-          console.log(`Auto Reply: Successfully replied to email ${email.id}`);
-        } else {
-          console.log(`Auto Reply: Failed to send reply for email ${email.id}:`, sendResponse.message);
+        // Send the reply
+        const sendResponse = await sendReply(email.id, trimmedReply);
+        if (!sendResponse.success) {
+          console.error(`Auto Reply: Failed to send reply for email ${email.id}: ${sendResponse.message}`);
         }
 
         // Add small delay between replies to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
-        console.error(`Auto Reply: Error processing email ${email.id}:`, error);
+        console.error(`Auto Reply: Error processing email ${email.id}:`, error instanceof Error ? error.message : String(error));
         // Continue with next email even if one fails
       }
     }

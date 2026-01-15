@@ -23,6 +23,24 @@ export const authenticateWithGoogle = async (accessToken: string): Promise<Googl
   return response.json();
 };
 
+export interface OutlookAuthResponse {
+  api_token: string;
+  user: { id: number; email: string; name: string; image_url?: string };
+}
+
+export const authenticateWithOutlook = async (accessToken: string): Promise<OutlookAuthResponse> => {
+  const response = await fetch(`${API_BASE_URL}/auth/microsoft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
+
 export interface VerifyTokenResponse {
   valid: boolean;
   user: { id: number; email: string; name: string };

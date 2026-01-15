@@ -6,7 +6,10 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "scheme": "gmailassistant",
+    "scheme": [
+      "msauth",
+      "gmailassistant"
+    ],
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -26,7 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.gmailassistant.app",
-      "versionCode": 4
+      "versionCode": 5
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,7 +42,7 @@
     "plugin": [
       "@react-native-google-signin/google-signin",
       {
-        "iosUrlScheme": "809633911701-vtffo0qodrc5p4uk31jt66kgf2pumrst.apps.googleusercontent.com"
+        "iosUrlScheme": "com.googleusercontent.apps.809633911701-vtffo0qodrc5p4uk31jt66kgf2pumrst"
       }
     ]
   }
