@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
-  Modal,
+  Modal,TextInput,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -194,37 +194,48 @@ export default function EmailDetailScreen({
                 </TouchableOpacity>
               )}
 
-              {generatedReply && (
-                <View style={styles.replyPreview}>
-                  <Text style={styles.replyPreviewLabel}>Generated Reply:</Text>
-                  <View style={styles.replyPreviewBox}>
-                    <Text style={styles.replyPreviewText}>{generatedReply}</Text>
-                  </View>
-                  <View style={styles.replyActions}>
-                    <TouchableOpacity
-                      style={styles.regenerateButton}
-                      onPress={() => {
-                        setGeneratedReply(null);
-                        handleGenerateReply();
-                      }}
-                      disabled={generating}
-                    >
-                      <Text style={styles.regenerateButtonText}>Regenerate</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.sendButton}
-                      onPress={handleSendReply}
-                      disabled={sending}
-                    >
-                      {sending ? (
-                        <ActivityIndicator size="small" color="#ffffff" />
-                      ) : (
-                        <Text style={styles.sendButtonText}>Send Reply</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
+{generatedReply && (
+  <View style={styles.replyPreview}>
+    <Text style={styles.replyPreviewLabel}>Generated Reply:</Text>
+
+    <View style={styles.replyPreviewBox}>
+      <TextInput
+        style={styles.replyPreviewText}
+        value={generatedReply}
+        onChangeText={setGeneratedReply}
+        multiline
+        editable={!sending}
+        placeholder="Edit generated reply..."
+      />
+    </View>
+
+    <View style={styles.replyActions}>
+      <TouchableOpacity
+        style={styles.regenerateButton}
+        onPress={() => {
+          setGeneratedReply(null);
+          handleGenerateReply();
+        }}
+        disabled={generating}
+      >
+        <Text style={styles.regenerateButtonText}>Regenerate</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.sendButton}
+        onPress={handleSendReply}
+        disabled={sending}
+      >
+        {sending ? (
+          <ActivityIndicator size="small" color="#ffffff" />
+        ) : (
+          <Text style={styles.sendButtonText}>Send Reply</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  </View>
+)}
+
             </View>
           </ScrollView>
         ) : null}

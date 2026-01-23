@@ -76,7 +76,7 @@ export default function HomeScreen({
             </View>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>Nebubots</Text>
+            <Text style={styles.headerTitle}>Chero</Text>
             <Text style={styles.headerSubtitle}>
               AI-Powered Email Assistant
             </Text>

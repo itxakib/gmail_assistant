@@ -105,7 +105,7 @@ export default function SplashScreen({ onFinish }: SplashScreenProps) {
             },
           ]}
         >
-          <Text style={styles.title}>Nebubots</Text>
+          <Text style={styles.title}>Chero</Text>
           <View style={styles.subtitleContainer}>
             <Text style={styles.subtitle}>AI-Powered Email Assistant</Text>
           </View>
