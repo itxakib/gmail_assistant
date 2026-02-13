@@ -170,9 +170,11 @@ export default function App() {
         <GestureHandlerRootView style={{ flex: 1 }}>
           {currentScreen === 'Splash' || isCheckingSession ? (
             <SplashScreen onFinish={handleSplashFinish} />
-          ) : currentScreen === 'Login' ? (
+          ) : 
+          currentScreen === 'Login' ? (
             <LoginScreen onLoginSuccess={handleLoginSuccess} />
-          ) : (
+          ) 
+          : (
             <>
               {renderMainScreen()}
               <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />

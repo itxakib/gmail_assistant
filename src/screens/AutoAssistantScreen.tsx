@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,32 +10,49 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+  Animated,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Audio } from "expo-av";
+import {
+  useSpeechRecognitionEvent,
+  ExpoSpeechRecognitionModule,
+} from "expo-speech-recognition";
+
+import { Feather, Ionicons } from "@expo/vector-icons";
+
 import {
   getAssistantHistory,
   sendAssistantMessage,
   AssistantMessage,
-} from '../services/api';
-import { useAlert } from '../services/alertService';
+} from "../services/api";
+import { useAlert } from "../services/alertService";
 
 export default function AutoAssistantScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { showAlert } = useAlert();
-  const [messages, setMessages] = useState<AssistantMessage[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
+  // 🎤 Voice states
+  const [isListening, setIsListening] = useState(false);
+  const [hasMicPermission, setHasMicPermission] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  /* =========================
+     Load Chat History
+  ========================= */
   const loadHistory = useCallback(async () => {
     try {
       setLoading(true);
       const response = await getAssistantHistory();
       setMessages(response.messages);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load chat history';
-      showAlert('Error', errorMessage);
+      showAlert("Error", "Failed to load chat history");
     } finally {
       setLoading(false);
     }
@@ -46,39 +63,121 @@ export default function AutoAssistantScreen(): React.JSX.Element {
   }, [loadHistory]);
 
   useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
   }, [messages]);
 
-  const handleSend = async () => {
-    if (inputText.trim() === '' || sending) return;
+  /* =========================
+     Mic Permission
+  ========================= */
+  useEffect(() => {
+    (async () => {
+      const { status } = await Audio.requestPermissionsAsync();
+      setHasMicPermission(status === "granted");
+    })();
+  }, []);
 
-    const userMessage = inputText.trim();
-    setInputText('');
-    setSending(true);
+  /* =========================
+     Pulse Animation
+  ========================= */
+  useEffect(() => {
+    if (isListening) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isListening]);
 
-    // Optimistically add user message
-    const tempUserMessage: AssistantMessage = {
-      id: Date.now(),
-      message: userMessage,
-      role: 'user',
-      created_at: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, tempUserMessage]);
+  /* =========================
+     Speech Events
+  ========================= */
+  useSpeechRecognitionEvent("start", () => {
+    setIsListening(true);
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    setIsListening(false);
+  });
+
+  useSpeechRecognitionEvent("error", () => {
+    setIsListening(false);
+  });
+
+  useSpeechRecognitionEvent("result", (event: any) => {
+    const transcript = event.results?.[0]?.transcript ?? "";
+    setInputText(transcript);
+  });
+
+  /* =========================
+     Voice Controls
+  ========================= */
+  const startVoice = async () => {
+    if (!hasMicPermission) {
+      showAlert("Permission", "Microphone permission required");
+      return;
+    }
 
     try {
-      const response = await sendAssistantMessage(userMessage);
-      setMessages(prev => {
-        const updated = prev.filter(msg => msg.id !== tempUserMessage.id);
-        return [...updated, response.user_message, response.assistant_message];
+      await ExpoSpeechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+        continuous: false,
+        addsPunctuation: true,
       });
+    } catch (err) {
+      showAlert("Error", "Failed to start voice recognition");
+    }
+  };
+
+  const stopVoice = async () => {
+    try {
+      await ExpoSpeechRecognitionModule.stop();
+    } catch {}
+  };
+
+  /* =========================
+     Send Message
+  ========================= */
+  const handleSend = async () => {
+    if (!inputText.trim() || sending) return;
+
+    const text = inputText.trim();
+    setInputText("");
+    setSending(true);
+
+    const tempMessage: AssistantMessage = {
+      id: Date.now(),
+      message: text,
+      role: "user",
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages(prev => [...prev, tempMessage]);
+
+    try {
+      const response = await sendAssistantMessage(text);
+      setMessages(prev =>
+        prev.filter(m => m.id !== tempMessage.id).concat([
+          response.user_message,
+          response.assistant_message,
+        ])
+      );
     } catch (error) {
-      setMessages(prev => prev.filter(msg => msg.id !== tempUserMessage.id));
-      const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
-      showAlert('Error', errorMessage);
+      showAlert("Error", "Failed to send message");
     } finally {
       setSending(false);
     }
@@ -87,101 +186,106 @@ export default function AutoAssistantScreen(): React.JSX.Element {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar
-          barStyle="light-content"
-          translucent={Platform.OS === 'android'}
-          backgroundColor={Platform.OS === 'android' ? '#6366f1' : undefined}
-        />
+        <StatusBar barStyle="light-content" backgroundColor="#6366f1" />
 
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Auto Assistant</Text>
           <Text style={styles.headerSubtitle}>AI-Powered Email Helper</Text>
         </View>
 
+        {/* Messages */}
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#ffffff" />
-            <Text style={styles.loadingText}>Loading chat history...</Text>
-          </View>
+          <ActivityIndicator size="large" color="#fff" style={{ marginTop: 40 }} />
         ) : (
-          <>
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.messagesContainer}
-              contentContainerStyle={styles.messagesContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {messages.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyIcon}>💬</Text>
-                  <Text style={styles.emptyTitle}>No messages yet</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Start a conversation with your AI assistant
-                  </Text>
-                </View>
-              ) : (
-                messages.map(message => (
-                  <MessageBubble key={message.id} message={message} />
-                ))
-              )}
-              {sending && (
-                <View style={styles.aiMessage}>
-                  <ActivityIndicator size="small" color="#ffffff" />
-                </View>
-              )}
-            </ScrollView>
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.messagesContainer}
+            contentContainerStyle={styles.messagesContent}
+          >
+            {messages.map(msg => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))}
 
-            <View style={[styles.inputContainer, { paddingBottom: insets.bottom }]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Type your message..."
-                placeholderTextColor="rgba(255, 255, 255, 0.5)"
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-                maxLength={500}
-                editable={!sending}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!inputText.trim() || sending) && styles.sendButtonDisabled,
-                ]}
-                onPress={handleSend}
-                disabled={!inputText.trim() || sending}
-                activeOpacity={0.7}
-              >
-                {sending ? (
-                  <ActivityIndicator size="small" color="#6366f1" />
-                ) : (
-                  <Text style={styles.sendButtonText}>Send</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </>
+            {sending && (
+              <View style={styles.aiMessage}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            )}
+          </ScrollView>
         )}
+
+        {/* Input */}
+        <View style={styles.inputContainer}>
+          {/* Listening Indicator */}
+          {isListening && (
+            <View style={styles.listeningIndicator}>
+              <Animated.View 
+                style={[
+                  styles.listeningDot,
+                  { transform: [{ scale: pulseAnim }] }
+                ]} 
+              />
+              <Text style={styles.listeningText}>Listening...</Text>
+            </View>
+          )}
+
+          <View style={styles.inputRow}>
+            {/* 🎤 MIC BUTTON */}
+            <TouchableOpacity
+              style={[
+                styles.micButton,
+                isListening && styles.micButtonActive,
+              ]}
+              onPress={isListening ? stopVoice : startVoice}
+            >
+              <Feather
+                name={isListening ? "mic-off" : "mic"}
+                size={22}
+                color="#fff"
+              />
+            </TouchableOpacity>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Type or speak..."
+              placeholderTextColor="rgba(255,255,255,0.6)"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              editable={!isListening}
+            />
+
+            {/* 📤 SEND BUTTON */}
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                (!inputText.trim() || sending) && styles.sendDisabled,
+              ]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#6366f1" />
+              ) : (
+                <Ionicons name="send" size={20} color="#6366f1" />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
-interface MessageBubbleProps {
-  message: AssistantMessage;
-}
-
-function MessageBubble({ message }: MessageBubbleProps) {
-  const isUser = message.role === 'user';
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+/* =========================
+   Message Bubble
+========================= */
+function MessageBubble({ message }: { message: AssistantMessage }) {
+  const isUser = message.role === "user";
 
   return (
     <View
@@ -190,159 +294,119 @@ function MessageBubble({ message }: MessageBubbleProps) {
         isUser ? styles.userMessage : styles.aiMessage,
       ]}
     >
-      <Text
-        style={[
-          styles.messageText,
-          isUser ? styles.userMessageText : styles.aiMessageText,
-        ]}
-      >
+      <Text style={isUser ? styles.userText : styles.aiText}>
         {message.message}
-      </Text>
-      <Text
-        style={[
-          styles.messageTime,
-          isUser ? styles.userMessageTime : styles.aiMessageTime,
-        ]}
-      >
-        {formatTime(message.created_at)}
       </Text>
     </View>
   );
 }
 
+/* =========================
+   Styles
+========================= */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#6366f1',
+    backgroundColor: "#6366f1",
   },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: "rgba(255,255,255,0.1)",
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#fff",
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#e0e7ff',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#ffffff',
+    color: "#e0e7ff",
+    marginTop: 4,
   },
   messagesContainer: {
     flex: 1,
   },
   messagesContent: {
-    padding: 20,
-    paddingBottom: 10,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#c7d2fe',
-    textAlign: 'center',
-    paddingHorizontal: 40,
+    padding: 16,
   },
   messageBubble: {
-    maxWidth: '80%',
+    maxWidth: "80%",
     padding: 12,
     borderRadius: 16,
     marginBottom: 12,
   },
   userMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#ffffff',
-    borderBottomRightRadius: 4,
+    alignSelf: "flex-end",
+    backgroundColor: "#fff",
   },
   aiMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderBottomLeftRadius: 4,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
-  messageText: {
-    fontSize: 15,
-    lineHeight: 20,
-    marginBottom: 4,
+  userText: {
+    color: "#111",
   },
-  userMessageText: {
-    color: '#1f2937',
-  },
-  aiMessageText: {
-    color: '#ffffff',
-  },
-  messageTime: {
-    fontSize: 10,
-    marginTop: 4,
-  },
-  userMessageTime: {
-    color: '#6b7280',
-  },
-  aiMessageTime: {
-    color: '#c7d2fe',
+  aiText: {
+    color: "#fff",
   },
   inputContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    padding: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: '#6366f1',
-    alignItems: 'flex-end',
+    borderTopColor: "rgba(255,255,255,0.1)",
+  },
+  listeningIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  listeningDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ef4444",
+    marginRight: 8,
+  },
+  listeningText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+  },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 8,
+  },
+  micButtonActive: {
+    backgroundColor: "#ef4444",
   },
   input: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: "rgba(255,255,255,0.15)",
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: '#ffffff',
-    fontSize: 15,
+    padding: 12,
+    color: "#fff",
     maxHeight: 100,
-    marginRight: 8,
   },
   sendButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 70,
+    marginLeft: 8,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  sendButtonDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  sendButtonText: {
-    color: '#6366f1',
-    fontSize: 15,
-    fontWeight: '600',
+  sendDisabled: {
+    opacity: 0.4,
   },
 });

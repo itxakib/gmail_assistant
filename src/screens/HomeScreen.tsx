@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tab } from '../components/BottomTabBar';
@@ -71,9 +72,11 @@ export default function HomeScreen({
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>N</Text>
-            </View>
+            <Image
+              source={require('../../assets/chero.jpeg')}
+              style={styles.logoImage}
+              resizeMode="cover"
+            />
           </View>
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Chero</Text>
@@ -283,19 +286,10 @@ const styles = StyleSheet.create({
   logoContainer: {
     marginRight: 12,
   },
-  logoCircle: {
+  logoImage: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#6366f1',
   },
   headerText: {
     flex: 1,

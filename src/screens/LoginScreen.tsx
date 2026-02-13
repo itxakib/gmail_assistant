@@ -7,6 +7,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -225,11 +226,13 @@ export default function LoginScreen({
 
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>N</Text>
-          </View>
+          <Image
+            source={require('../../assets/chero.jpeg')}
+            style={styles.logoImage}
+            resizeMode="cover"
+          />
         </View>
-        <Text style={styles.title}>Welcome to Nebubots</Text>
+        <Text style={styles.title}>Welcome to Chero</Text>
         <Text style={styles.subtitle}>AI-Powered Email Assistant</Text>
       </View>
 
@@ -289,20 +292,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#6366f1' },
   header: { alignItems: 'center', paddingTop: 40, paddingBottom: 20 },
   logoContainer: { marginBottom: 24 },
-  logoCircle: {
+  logoImage: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
-  logoText: { fontSize: 48, fontWeight: 'bold', color: '#6366f1' },
   title: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', letterSpacing: 0.5, marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 16, color: '#e0e7ff', fontWeight: '500', letterSpacing: 0.3, textAlign: 'center' },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
-  Modal,TextInput,
+  Modal,
+  TextInput,
   Platform,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -39,6 +42,34 @@ export default function EmailDetailScreen({
   const [generatedReply, setGeneratedReply] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const replyInputRef = useRef<View>(null);
+
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // Scroll to the input when keyboard opens with a gentle scroll
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 250);
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible && emailId) {
@@ -46,6 +77,7 @@ export default function EmailDetailScreen({
     } else {
       setEmail(null);
       setGeneratedReply(null);
+      setKeyboardHeight(0);
     }
   }, [visible, emailId]);
 
@@ -141,103 +173,123 @@ export default function EmailDetailScreen({
             <Text style={styles.loadingText}>Loading email...</Text>
           </View>
         ) : email ? (
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-            <View style={styles.emailHeader}>
-              <Text style={styles.emailSubject}>{email.subject || '(No Subject)'}</Text>
-              <View style={styles.emailMeta}>
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>From:</Text>
-                  <Text style={styles.metaValue}>{email.from_email}</Text>
-                </View>
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>To:</Text>
-                  <Text style={styles.metaValue}>{email.to_email}</Text>
-                </View>
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Date:</Text>
-                  <Text style={styles.metaValue}>{formatDate(email.received_at)}</Text>
-                </View>
-                <View style={styles.metaRow}>
-                  <Text style={styles.metaLabel}>Status:</Text>
-                  <View style={styles.statusContainer}>
-                    {email.read ? (
-                      <Text style={styles.statusText}>✓ Read</Text>
-                    ) : (
-                      <Text style={[styles.statusText, styles.unreadText]}>● Unread</Text>
-                    )}
-                    {email.replied_at && (
-                      <Text style={[styles.statusText, styles.repliedText]}>✓ Replied</Text>
-                    )}
+          <KeyboardAvoidingView
+            style={styles.keyboardView}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <ScrollView 
+              ref={scrollViewRef}
+              style={styles.scrollView} 
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: keyboardHeight > 0 ? 20 : 20 }
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={true}
+            >
+              <View style={styles.emailHeader}>
+                <Text style={styles.emailSubject}>{email.subject || '(No Subject)'}</Text>
+                <View style={styles.emailMeta}>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>From:</Text>
+                    <Text style={styles.metaValue}>{email.from_email}</Text>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>To:</Text>
+                    <Text style={styles.metaValue}>{email.to_email}</Text>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Date:</Text>
+                    <Text style={styles.metaValue}>{formatDate(email.received_at)}</Text>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.metaLabel}>Status:</Text>
+                    <View style={styles.statusContainer}>
+                      {email.read ? (
+                        <Text style={styles.statusText}>✓ Read</Text>
+                      ) : (
+                        <Text style={[styles.statusText, styles.unreadText]}>● Unread</Text>
+                      )}
+                      {email.replied_at && (
+                        <Text style={[styles.statusText, styles.repliedText]}>✓ Replied</Text>
+                      )}
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
 
-            <View style={styles.emailBody}>
-              <Text style={styles.bodyText}>
-                {email.body.replace(/<[^>]*>/g, '').trim() || 'No content available'}
-              </Text>
-            </View>
+              <View style={styles.emailBody}>
+                <Text style={styles.bodyText}>
+                  {email.body.replace(/<[^>]*>/g, '').trim() || 'No content available'}
+                </Text>
+              </View>
 
-            <View style={styles.replySection}>
-              {!generatedReply && (
-                <TouchableOpacity
-                  style={styles.generateButton}
-                  onPress={handleGenerateReply}
-                  disabled={generating}
-                >
-                  {generating ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <Text style={styles.generateButtonText}>Generate Auto Reply</Text>
-                  )}
-                </TouchableOpacity>
-              )}
+              <View style={styles.replySection}>
+                {!generatedReply && (
+                  <TouchableOpacity
+                    style={styles.generateButton}
+                    onPress={handleGenerateReply}
+                    disabled={generating}
+                  >
+                    {generating ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <Text style={styles.generateButtonText}>Generate Auto Reply</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
 
-{generatedReply && (
-  <View style={styles.replyPreview}>
-    <Text style={styles.replyPreviewLabel}>Generated Reply:</Text>
+                {generatedReply && (
+                  <View style={styles.replyPreview} ref={replyInputRef}>
+                    <Text style={styles.replyPreviewLabel}>Generated Reply:</Text>
 
-    <View style={styles.replyPreviewBox}>
-      <TextInput
-        style={styles.replyPreviewText}
-        value={generatedReply}
-        onChangeText={setGeneratedReply}
-        multiline
-        editable={!sending}
-        placeholder="Edit generated reply..."
-      />
-    </View>
+                    <View style={styles.replyPreviewBox}>
+                      <TextInput
+                        style={styles.replyPreviewText}
+                        value={generatedReply}
+                        onChangeText={setGeneratedReply}
+                        multiline
+                        editable={!sending}
+                        placeholder="Edit generated reply..."
+                        textAlignVertical="top"
+                        onFocus={() => {
+                          setTimeout(() => {
+                            scrollViewRef.current?.scrollToEnd({ animated: true });
+                          }, 100);
+                        }}
+                      />
+                    </View>
 
-    <View style={styles.replyActions}>
-      <TouchableOpacity
-        style={styles.regenerateButton}
-        onPress={() => {
-          setGeneratedReply(null);
-          handleGenerateReply();
-        }}
-        disabled={generating}
-      >
-        <Text style={styles.regenerateButtonText}>Regenerate</Text>
-      </TouchableOpacity>
+                    <View style={styles.replyActions}>
+                      <TouchableOpacity
+                        style={styles.regenerateButton}
+                        onPress={() => {
+                          setGeneratedReply(null);
+                          handleGenerateReply();
+                        }}
+                        disabled={generating}
+                      >
+                        <Text style={styles.regenerateButtonText}>Regenerate</Text>
+                      </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.sendButton}
-        onPress={handleSendReply}
-        disabled={sending}
-      >
-        {sending ? (
-          <ActivityIndicator size="small" color="#ffffff" />
-        ) : (
-          <Text style={styles.sendButtonText}>Send Reply</Text>
-        )}
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
-
-            </View>
-          </ScrollView>
+                      <TouchableOpacity
+                        style={styles.sendButton}
+                        onPress={handleSendReply}
+                        disabled={sending}
+                      >
+                        {sending ? (
+                          <ActivityIndicator size="small" color="#ffffff" />
+                        ) : (
+                          <Text style={styles.sendButtonText}>Send Reply</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         ) : null}
       </View>
     </Modal>
@@ -248,6 +300,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#6366f1',
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -292,7 +347,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
   emailHeader: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -307,7 +362,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emailMeta: {
-    gap: 8,
+    // Removed gap for better compatibility
   },
   metaRow: {
     flexDirection: 'row',
@@ -326,12 +381,12 @@ const styles = StyleSheet.create({
   },
   statusContainer: {
     flexDirection: 'row',
-    gap: 12,
   },
   statusText: {
     fontSize: 14,
     color: '#ffffff',
     fontWeight: '500',
+    marginRight: 12,
   },
   unreadText: {
     color: '#fbbf24',
@@ -393,7 +448,6 @@ const styles = StyleSheet.create({
   },
   replyActions: {
     flexDirection: 'row',
-    gap: 12,
   },
   regenerateButton: {
     flex: 1,
@@ -403,6 +457,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginRight: 12,
   },
   regenerateButtonText: {
     fontSize: 15,

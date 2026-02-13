@@ -18,32 +18,40 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.gmailassistant.app",
+      "buildNumber": "4",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      },
-      "buildNumber": "3"
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMicrophoneUsageDescription": "This app needs microphone access for speech recognition",
+        "NSSpeechRecognitionUsageDescription": "This app uses speech recognition to convert speech to text"
+      }
     },
     "android": {
+      "package": "com.gmailassistant.app",
+      "versionCode": 9,
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "package": "com.gmailassistant.app",
-      "versionCode": 5
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugin": [
+      "expo-speech-recognition",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.809633911701-vtffo0qodrc5p4uk31jt66kgf2pumrst"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "cce04303-652d-4dd2-9882-0d72770b7d42"
       }
-    },
-    "plugin": [
-      "@react-native-google-signin/google-signin",
-      {
-        "iosUrlScheme": "com.googleusercontent.apps.809633911701-vtffo0qodrc5p4uk31jt66kgf2pumrst"
-      }
-    ]
+    }
   }
 }
